@@ -1,38 +1,216 @@
 require("dotenv").config();
+
 const express = require("express");
 const path = require("path");
-const app = express();
-app.use(express.json({limit:"1mb"}));
-app.use(express.static(__dirname));
 
-app.post("/api/chat", async (req,res)=>{
-  try {
-    const {provider="openrouter", model, system="", messages=[]} = req.body || {};
-    const safeMessages = Array.isArray(messages) ? messages.filter(m => ["user","assistant"].includes(m.role) && typeof m.content === "string").slice(-30) : [];
-    let url, key, body, headers;
-    if (provider === "openrouter") {
-      key=process.env.OPENROUTER_API_KEY; url="https://openrouter.ai/api/v1/chat/completions";
-      headers={"Authorization":`Bearer ${key}`,"Content-Type":"application/json","HTTP-Referer":process.env.APP_URL||"http://localhost:3000","X-Title":"MR SOLARYS IA DEV"};
-      body={model:model||process.env.OPENROUTER_MODEL||"openai/gpt-4o-mini",messages:[{role:"system",content:system},...safeMessages],max_tokens:2000};
-    } else if (provider === "openai") {
-      key=process.env.OPENAI_API_KEY; url="https://api.openai.com/v1/responses";
-      headers={"Authorization":`Bearer ${key}`,"Content-Type":"application/json"};
-      body={model:process.env.OPENAI_MODEL||"gpt-4.1-mini",instructions:system,input:safeMessages.map(m=>({role:m.role,content:[{type:"input_text",text:m.content}]})),max_output_tokens:2000};
-    } else if (provider === "anthropic") {
-      key=process.env.ANTHROPIC_API_KEY; url="https://api.anthropic.com/v1/messages";
-      headers={"x-api-key":key,"anthropic-version":"2023-06-01","Content-Type":"application/json"};
-      body={model:process.env.ANTHROPIC_MODEL||"claude-sonnet-4-5",system,max_tokens:2000,messages:safeMessages};
-    } else return res.status(400).json({error:"Founisè sa a pa sipòte."});
-    if(!key) return res.status(400).json({error:`Manke kle API pou ${provider} nan fichye .env la.`});
-    const upstream=await fetch(url,{method:"POST",headers,body:JSON.stringify(body)});
-    const data=await upstream.json().catch(()=>({}));
-    if(!upstream.ok) return res.status(upstream.status).json({error:data.error?.message||data.message||"Founisè IA a retounen yon erè."});
-    let reply="";
-    if(provider==="openrouter") reply=data.choices?.[0]?.message?.content||"";
-    else if(provider==="openai") reply=(data.output||[]).flatMap(x=>x.content||[]).filter(x=>x.type==="output_text").map(x=>x.text).join("\n");
-    else reply=(data.content||[]).map(x=>x.text||"").join("\n");
-    res.json({reply:reply||"Mwen pa jwenn repons nan men modèl la."});
-  } catch(e) { res.status(500).json({error:"Erè sèvè. Verifye koneksyon ak konfigirasyon an."}); }
+const app = express();
+
+app.use(express.json({ limit: "1mb" }));
+
+// Paj dakèy MR SOLARYS IA
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "index.html"));
 });
-const port=process.env.PORT||3000;
-app.listen(port,()=>console.log(`MR SOLARYS IA ap mache sou http://localhost:${port}`));
+
+// Foto pwofil
+app.get("/profile.png", (req, res) => {
+  res.sendFile(path.join(__dirname, "profile.png"));
+});
+
+// Tcheke si sèvè a fonksyone
+app.get("/api/health", (req, res) => {
+  res.json({
+    success: true,
+    app: "MR SOLARYS IA — DEV",
+    status: "online"
+  });
+});
+
+// API prensipal chat la
+app.post("/api/chat", async (req, res) => {
+  try {
+    const {
+      provider = "openrouter",
+      model,
+      system,
+      messages
+    } = req.body || {};
+
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({
+        error: "Voye omwen yon mesaj."
+      });
+    }
+
+    const safeMessages = messages
+      .filter(
+        (m) =>
+          m &&
+          ["user", "assistant"].includes(m.role) &&
+          typeof m.content === "string"
+      )
+      .slice(-30);
+
+    if (safeMessages.length === 0) {
+      return res.status(400).json({
+        error: "Pa gen mesaj ki valab."
+      });
+    }
+
+    const systemPrompt =
+      typeof system === "string" && system.trim()
+        ? system.trim()
+        : "Tu es MR SOLARYS IA, un assistant compétent en programmation et en résolution de problèmes.";
+
+    let url;
+    let key;
+    let headers;
+    let body;
+    let providerName;
+
+    if (provider === "openrouter") {
+      key = process.env.OPENROUTER_API_KEY;
+      url = "https://openrouter.ai/api/v1/chat/completions";
+      providerName = "OpenRouter";
+
+      body = {
+        model: model || "openai/gpt-4o-mini",
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...safeMessages
+        ],
+        max_tokens: 2000
+      };
+    } else if (provider === "openai") {
+      key = process.env.OPENAI_API_KEY;
+      url = "https://api.openai.com/v1/chat/completions";
+      providerName = "OpenAI";
+
+      body = {
+        model: model || process.env.OPENAI_MODEL || "gpt-4o-mini",
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...safeMessages
+        ],
+        max_tokens: 2000
+      };
+    } else if (provider === "deepseek") {
+      key = process.env.DEEPSEEK_API_KEY;
+      url = "https://api.deepseek.com/chat/completions";
+      providerName = "DeepSeek";
+
+      body = {
+        model: model || "deepseek-chat",
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...safeMessages
+        ],
+        max_tokens: 2000
+      };
+    } else if (provider === "anthropic") {
+      key = process.env.ANTHROPIC_API_KEY;
+      url = "https://api.anthropic.com/v1/messages";
+      providerName = "Anthropic";
+
+      body = {
+        model: model || "claude-3-5-haiku-latest",
+        max_tokens: 2000,
+        system: systemPrompt,
+        messages: safeMessages
+      };
+    } else {
+      return res.status(400).json({
+        error: "Founisè sa a pa sipòte."
+      });
+    }
+
+    if (!key) {
+      return res.status(503).json({
+        error:
+          "Kle API pou " +
+          providerName +
+          " pa konfigire sou sèvè a."
+      });
+    }
+
+    headers = {
+      "Content-Type": "application/json"
+    };
+
+    if (provider === "anthropic") {
+      headers["x-api-key"] = key;
+      headers["anthropic-version"] = "2023-06-01";
+    } else {
+      headers["Authorization"] = `Bearer ${key}`;
+    }
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(60000)
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      console.error(
+        `${providerName} API error:`,
+        response.status
+      );
+
+      return res.status(502).json({
+        error:
+          data.error?.message ||
+          data.message ||
+          `${providerName} pa kapab reponn kounye a.`,
+        provider: providerName,
+        status: response.status
+      });
+    }
+
+    let reply = "";
+
+    if (provider === "anthropic") {
+      reply = (data.content || [])
+        .filter((item) => item.type === "text")
+        .map((item) => item.text)
+        .join("\n");
+    } else {
+      reply = data.choices?.[0]?.message?.content || "";
+    }
+
+    if (!reply) {
+      return res.status(502).json({
+        error: "IA a pa retounen okenn repons."
+      });
+    }
+
+    return res.json({
+      success: true,
+      provider: providerName,
+      reply
+    });
+  } catch (error) {
+    console.error("Chat error:", error.message);
+
+    return res.status(500).json({
+      error:
+        "Yon pwoblèm rive pandan demann lan. Eseye ankò."
+    });
+  }
+});
+
+// Ekspòte aplikasyon an pou Vercel
+module.exports = app;
+
+// Pèmèt sèvè a mache lokalman tou
+if (require.main === module) {
+  const port = process.env.PORT || 3000;
+
+  app.listen(port, () => {
+    console.log(
+      `MR SOLARYS IA ap mache sou pò ${port}`
+    );
+  });
+             }
