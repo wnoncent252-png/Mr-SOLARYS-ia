@@ -1,4 +1,8 @@
-require("dotenv").config();
+try {
+  require("dotenv").config();
+} catch (_) {
+  // dotenv est optionnel sur Vercel : les variables viennent des réglages du projet
+}
 
 const express = require("express");
 const path = require("path");
@@ -6,6 +10,10 @@ const path = require("path");
 const app = express();
 
 app.use(express.json({ limit: "1mb" }));
+
+// Modèle par défaut pour OpenRouter (modifiable via la variable OPENROUTER_MODEL sur Vercel)
+const DEFAULT_OPENROUTER_MODEL =
+  process.env.OPENROUTER_MODEL || "deepseek/deepseek-chat-v3-0324:free";
 
 // Paj dakèy MR SOLARYS IA
 app.get("/", (req, res) => {
@@ -22,7 +30,8 @@ app.get("/api/health", (req, res) => {
   res.json({
     success: true,
     app: "MR SOLARYS IA — DEV",
-    status: "online"
+    status: "online",
+    openrouterKey: Boolean(process.env.OPENROUTER_API_KEY)
   });
 });
 
@@ -60,7 +69,7 @@ app.post("/api/chat", async (req, res) => {
     const systemPrompt =
       typeof system === "string" && system.trim()
         ? system.trim()
-        : "Tu es MR SOLARYS IA, un assistant compétent en programmation et en résolution de problèmes.";
+        : "Tu es MR SOLARYS IA, un assistant compétent en programmation et en résolution de problèmes. Réponds dans la langue de l'utilisateur (français, créole haïtien ou anglais), avec la réponse d'abord, puis les détails utiles.";
 
     let url;
     let key;
@@ -73,8 +82,9 @@ app.post("/api/chat", async (req, res) => {
       url = "https://openrouter.ai/api/v1/chat/completions";
       providerName = "OpenRouter";
 
+      // Le modèle est imposé par le serveur : celui envoyé par le site/APK est ignoré
       body = {
-        model: model || "openai/gpt-4o-mini",
+        model: DEFAULT_OPENROUTER_MODEL,
         messages: [
           { role: "system", content: systemPrompt },
           ...safeMessages
@@ -142,6 +152,11 @@ app.post("/api/chat", async (req, res) => {
       headers["anthropic-version"] = "2023-06-01";
     } else {
       headers["Authorization"] = `Bearer ${key}`;
+    }
+
+    if (provider === "openrouter") {
+      headers["HTTP-Referer"] = process.env.SITE_URL || "https://mr-solarys.vercel.app";
+      headers["X-Title"] = "MR SOLARYS IA";
     }
 
     const response = await fetch(url, {
@@ -213,4 +228,4 @@ if (require.main === module) {
       `MR SOLARYS IA ap mache sou pò ${port}`
     );
   });
-             }
+}
