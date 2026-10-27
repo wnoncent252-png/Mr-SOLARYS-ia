@@ -1,13 +1,12 @@
 {
-  "name": "mr-solarys-ia-dev",
+  "name": "mr-solarys-ia",
   "version": "1.0.0",
   "private": true,
-  "description": "MR SOLARYS IA DEV - interface chat with secured provider API proxy",
+  "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "dotenv": "^16.4.7",
-    "express": "^4.21.2"
+    "express": "^5.1.0"
   }
 }
