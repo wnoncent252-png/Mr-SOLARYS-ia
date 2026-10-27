@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>MR SOLARYS IA — DEV</title>
+<style>
+:root{--bg:#09090d;--panel:#15151c;--red:#ff252f;--text:#f4f4f7;--muted:#a7a7b3}
+*{box-sizing:border-box}html,body{height:100%;margin:0}body{background:radial-gradient(circle at top,#351014 0,#09090d 44%);color:var(--text);font-family:system-ui,Arial;display:flex;flex-direction:column}
+header{display:flex;align-items:center;gap:12px;padding:12px 15px;background:#101015ed;border-bottom:1px solid #5b1b22}
+.avatar{width:48px;height:48px;border-radius:50%;object-fit:cover;border:2px solid var(--red);box-shadow:0 0 14px #ff252f88}
+.brand{min-width:0;flex:1}.brand h1{font-size:16px;margin:0;font-weight:800;letter-spacing:.5px}.brand small{color:#ff7278}
+button{border:0;border-radius:10px;padding:11px 14px;font-weight:700;cursor:pointer}#settingsBtn{background:#292932;color:white;font-size:18px}
+#chat{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:11px}.msg{max-width:88%;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.45;padding:11px 14px;border-radius:15px}.user{align-self:flex-end;background:#b51e2b}.ai{align-self:flex-start;background:#1b1b24;border:1px solid #30303a}.system{align-self:center;color:var(--muted);font-size:12px}
+#bar{display:flex;gap:8px;padding:10px;background:#111117;border-top:1px solid #34303a;padding-bottom:max(10px,env(safe-area-inset-bottom))}
+textarea,input,select{font:inherit;color:var(--text);background:#09090d;border:1px solid #3b3038;border-radius:10px;padding:11px;width:100%}
+#prompt{flex:1;resize:none;max-height:130px}#send{background:var(--red);color:white}
+#modal{position:fixed;inset:0;background:#000b;display:none;align-items:center;justify-content:center;padding:18px}#modal.open{display:flex}.panel{width:100%;max-width:430px;max-height:90vh;overflow:auto;background:#17171f;border:1px solid #55252b;border-radius:16px;padding:18px}.panel label{display:block;margin:13px 0 6px;color:var(--muted);font-size:13px}.panel p{font-size:12px;color:var(--muted);line-height:1.5}.row{display:flex;gap:8px;margin-top:14px}.row button{flex:1}#save{background:var(--red);color:#fff}#close{background:#33333d;color:#fff}
+</style></head>
+<body>
+<header><img class="avatar" src="profile.png" alt="MR SOLARYS"><div class="brand"><h1>MR SOLARYS IA — DEV</h1><small id="status">Prêt à configurer</small></div><button id="settingsBtn" aria-label="Réglages">⚙️</button></header>
+<div id="chat"><div class="msg system">Bienvenue sur MR SOLARYS IA — DEV. Configure le fournisseur dans ⚙️ pour commencer.</div></div>
+<div id="bar"><textarea id="prompt" rows="1" placeholder="Pose ta question ou demande du code..."></textarea><button id="send">Envoyer</button></div>
+<div id="modal"><div class="panel"><h2>Réglages</h2><label>Fournisseur IA</label><select id="provider"><option value="openrouter">OpenRouter</option><option value="openai">OpenAI</option><option value="anthropic">Anthropic (Claude)</option></select><label>Modèle OpenRouter (si choisi)</label><input id="model" value="openai/gpt-4o-mini" placeholder="ex. openai/gpt-4o-mini"><p>La clé API ne doit pas être collée ici ni stockée dans le navigateur. Configure-la dans le fichier .env du serveur. Cette interface appelle /api/chat.</p><label>Personnalité</label><textarea id="system" rows="4">Tu es MR SOLARYS IA — DEV, un assistant francophone et créolophone, clair et compétent en programmation. Tu aides à écrire, comprendre et corriger du code. Signale les limites et ne prétends pas avoir exécuté un code si ce n'est pas le cas.</textarea><div class="row"><button id="close">Fermer</button><button id="save">Enregistrer</button></div></div></div>
+<script>
+(()=>{const $=id=>document.getElementById(id),chat=$('chat');let history=[];let cfg={provider:'openrouter',model:'openai/gpt-4o-mini',system:'Tu es MR SOLARYS IA — DEV, un assistant clair et compétent en programmation.'};
+try{cfg={...cfg,...JSON.parse(localStorage.getItem('mrs_cfg')||'{}')}}catch{}
+function status(){ $('status').textContent='Fournisseur : '+cfg.provider+' · clé conservée côté serveur';}
+function msg(text,role='ai'){const d=document.createElement('div');d.className='msg '+role;d.textContent=text;chat.appendChild(d);chat.scrollTop=chat.scrollHeight;return d}
+function open(){ $('provider').value=cfg.provider;$('model').value=cfg.model;$('system').value=cfg.system;$('modal').classList.add('open')}
+$('settingsBtn').onclick=open;$('close').onclick=()=>$('modal').classList.remove('open');
+$('save').onclick=()=>{cfg.provider=$('provider').value;cfg.model=$('model').value.trim()||'openai/gpt-4o-mini';cfg.system=$('system').value.trim();localStorage.setItem('mrs_cfg',JSON.stringify(cfg));$('modal').classList.remove('open');status();msg('Réglages enregistrés.','system')};
+async function send(){const text=$('prompt').value.trim();if(!text)return;msg(text,'user');history.push({role:'user',content:text});$('prompt').value='';$('send').disabled=true;const wait=msg('Réflexion…');
+try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider:cfg.provider,model:cfg.model,system:cfg.system,messages:history})});const data=await r.json();if(!r.ok)throw new Error(data.error||'Erreur serveur');wait.textContent=data.reply||'Aucune réponse';history.push({role:'assistant',content:wait.textContent})}
+catch(e){wait.textContent='Erreur : '+e.message+'\\nVérifie que le serveur est lancé et que la clé du fournisseur est configurée dans .env.'}
+finally{$('send').disabled=false;chat.scrollTop=chat.scrollHeight}}
+$('send').onclick=send;$('prompt').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}});status();
+})();
+</script></body></html>
